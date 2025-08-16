@@ -1,0 +1,176 @@
+version: '3.8'
+
+services:
+  # Service Discovery
+  eureka-server:
+    image: steeltoeoss/eureka-server:latest
+    ports:
+      - "8761:8761"
+    environment:
+      - EUREKA_CLIENT_REGISTER_WITH_EUREKA=false
+      - EUREKA_CLIENT_FETCH_REGISTRY=false
+    networks:
+      - booking-network
+
+  # Authentication & Authorization
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    ports:
+      - "8090:8080"
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+    command: start-dev
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+    networks:
+      - booking-network
+
+  # Databases
+  postgres-user:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=user_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_user_data:/var/lib/postgresql/data
+    networks:
+      - booking-network
+
+  postgres-booking:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=booking_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_booking_data:/var/lib/postgresql/data
+    networks:
+      - booking-network
+
+  postgres-business:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=business_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_business_data:/var/lib/postgresql/data
+    networks:
+      - booking-network
+
+  postgres-payment:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=payment_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_payment_data:/var/lib/postgresql/data
+    networks:
+      - booking-network
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - eureka-server
+      - keycloak
+    environment:
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka/
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/booking-platform
+    networks:
+      - booking-network
+
+  # Microservices
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    depends_on:
+      - postgres-user
+      - eureka-server
+      - keycloak
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-user:5432/user_db
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka/
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/booking-platform
+    networks:
+      - booking-network
+
+  booking-service:
+    build:
+      context: ./booking-service
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8082"
+    depends_on:
+      - postgres-booking
+      - eureka-server
+      - keycloak
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-booking:5432/booking_db
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka/
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/booking-platform
+    networks:
+      - booking-network
+
+  business-service:
+    build:
+      context: ./business-service
+      dockerfile: Dockerfile
+    ports:
+      - "8083:8083"
+    depends_on:
+      - postgres-business
+      - eureka-server
+      - keycloak
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-business:5432/business_db
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka/
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/booking-platform
+    networks:
+      - booking-network
+
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
+    ports:
+      - "8084:8084"
+    depends_on:
+      - postgres-payment
+      - eureka-server
+      - keycloak
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-payment:5432/payment_db
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka/
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/booking-platform
+    networks:
+      - booking-network
+
+volumes:
+  keycloak_data:
+  postgres_user_data:
+  postgres_booking_data:
+  postgres_business_data:
+  postgres_payment_data:
+
+networks:
+  booking-network:
+    driver: bridge

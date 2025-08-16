@@ -1,0 +1,7 @@
+com\project\userservice\repository\UserRepository.class
+com\project\userservice\entity\User$UserRole.class
+com\project\userservice\entity\User.class
+com\project\userservice\controller\UserController.class
+com\project\userservice\UserServiceApplication.class
+com\project\userservice\dto\UserDto.class
+com\project\userservice\service\UserService.class
