@@ -12,7 +12,82 @@ services:
     networks:
       - booking-network
 
+  # Message Broker
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    hostname: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    networks:
+      - booking-network
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    hostname: kafka
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    depends_on:
+      - zookeeper
+    networks:
+      - booking-network
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    ports:
+      - "8089:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    depends_on:
+      - kafka
+    networks:
+      - booking-network
+
   # Authentication & Authorization
+  postgres-keycloak:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=keycloak_db
+      - POSTGRES_USER=keycloak
+      - POSTGRES_PASSWORD=keycloak_password
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres_keycloak_data:/var/lib/postgresql/data
+    networks:
+      - booking-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   keycloak:
     image: quay.io/keycloak/keycloak:latest
     ports:
@@ -20,9 +95,17 @@ services:
     environment:
       - KEYCLOAK_ADMIN=admin
       - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://postgres-keycloak:5432/keycloak_db
+      - KC_DB_USERNAME=keycloak
+      - KC_DB_PASSWORD=keycloak_password
+      - KC_HOSTNAME_STRICT=false
+      - KC_HOSTNAME_STRICT_HTTPS=false
+      - KC_HTTP_ENABLED=true
     command: start-dev
-    volumes:
-      - keycloak_data:/opt/keycloak/data
+    depends_on:
+      postgres-keycloak:
+        condition: service_healthy
     networks:
       - booking-network
 
@@ -39,6 +122,11 @@ services:
       - postgres_user_data:/var/lib/postgresql/data
     networks:
       - booking-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d user_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   postgres-booking:
     image: postgres:15
@@ -52,6 +140,11 @@ services:
       - postgres_booking_data:/var/lib/postgresql/data
     networks:
       - booking-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d booking_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   postgres-business:
     image: postgres:15
@@ -65,6 +158,11 @@ services:
       - postgres_business_data:/var/lib/postgresql/data
     networks:
       - booking-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d business_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   postgres-payment:
     image: postgres:15
@@ -78,6 +176,11 @@ services:
       - postgres_payment_data:/var/lib/postgresql/data
     networks:
       - booking-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d payment_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   # API Gateway
   api-gateway:
@@ -103,13 +206,23 @@ services:
     ports:
       - "8081:8081"
     depends_on:
-      - postgres-user
-      - eureka-server
-      - keycloak
+      postgres-user:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+      keycloak:
+        condition: service_started
+      kafka:
+        condition: service_healthy
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-user:5432/user_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=password
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka/
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/booking-platform
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SPRING_KAFKA_CONSUMER_GROUP_ID=user-service-group
+      - SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET=earliest
     networks:
       - booking-network
 
@@ -120,13 +233,23 @@ services:
     ports:
       - "8082:8082"
     depends_on:
-      - postgres-booking
-      - eureka-server
-      - keycloak
+      postgres-booking:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+      keycloak:
+        condition: service_started
+      kafka:
+        condition: service_healthy
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-booking:5432/booking_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=password
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka/
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/booking-platform
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SPRING_KAFKA_CONSUMER_GROUP_ID=booking-service-group
+      - SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET=earliest
     networks:
       - booking-network
 
@@ -137,13 +260,23 @@ services:
     ports:
       - "8083:8083"
     depends_on:
-      - postgres-business
-      - eureka-server
-      - keycloak
+      postgres-business:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+      keycloak:
+        condition: service_started
+      kafka:
+        condition: service_healthy
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-business:5432/business_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=password
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka/
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/booking-platform
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SPRING_KAFKA_CONSUMER_GROUP_ID=business-service-group
+      - SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET=earliest
     networks:
       - booking-network
 
@@ -154,18 +287,34 @@ services:
     ports:
       - "8084:8084"
     depends_on:
-      - postgres-payment
-      - eureka-server
-      - keycloak
+      postgres-payment:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+      keycloak:
+        condition: service_started
+      kafka:
+        condition: service_healthy
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-payment:5432/payment_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=password
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka/
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/booking-platform
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SPRING_KAFKA_CONSUMER_GROUP_ID=payment-service-group
+      - SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET=earliest
     networks:
       - booking-network
 
 volumes:
-  keycloak_data:
+  # Kafka and Zookeeper volumes
+  zookeeper_data:
+  zookeeper_logs:
+  kafka_data:
+  
+  # Database volumes
+  postgres_keycloak_data:
   postgres_user_data:
   postgres_booking_data:
   postgres_business_data:
