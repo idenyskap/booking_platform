@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(mvn clean:*)",
+      "Bash(docker-compose:*)",
+      "Bash(curl:*)",
+      "Bash(mvn package:*)",
+      "Bash(docker exec:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": []
   }

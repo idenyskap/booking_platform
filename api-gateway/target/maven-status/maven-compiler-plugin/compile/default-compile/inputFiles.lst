@@ -1,1 +1,9 @@
 D:\IdeaProjects\booking_platform\api-gateway\src\main\java\com\project\apigateway\ApiGatewayApplication.java
+D:\IdeaProjects\booking_platform\api-gateway\src\main\java\com\project\apigateway\config\GatewayConfig.java
+D:\IdeaProjects\booking_platform\api-gateway\src\main\java\com\project\apigateway\config\RedisConfig.java
+D:\IdeaProjects\booking_platform\api-gateway\src\main\java\com\project\apigateway\config\SecurityConfig.java
+D:\IdeaProjects\booking_platform\api-gateway\src\main\java\com\project\apigateway\controller\FallbackController.java
+D:\IdeaProjects\booking_platform\api-gateway\src\main\java\com\project\apigateway\controller\HealthController.java
+D:\IdeaProjects\booking_platform\api-gateway\src\main\java\com\project\apigateway\filter\InMemoryRateLimitingFilter.java
+D:\IdeaProjects\booking_platform\api-gateway\src\main\java\com\project\apigateway\filter\JwtAuthenticationFilter.java
+D:\IdeaProjects\booking_platform\api-gateway\src\main\java\com\project\apigateway\filter\RequestLoggingFilter.java

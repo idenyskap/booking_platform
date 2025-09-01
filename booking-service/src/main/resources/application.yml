@@ -4,14 +4,22 @@ server:
 spring:
   application:
     name: booking-service
+  cloud:
+    compatibility-verifier:
+      enabled: false
   datasource:
-    url: jdbc:postgresql://localhost:5432/booking_db
+    url: jdbc:postgresql://localhost:5437/booking_db
     username: postgres
-    password: password
+    password: postgres
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    sql-migration-suffixes: .sql
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect

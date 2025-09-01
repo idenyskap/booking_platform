@@ -12,63 +12,6 @@ services:
     networks:
       - booking-network
 
-  # Message Broker
-  zookeeper:
-    image: confluentinc/cp-zookeeper:latest
-    hostname: zookeeper
-    ports:
-      - "2181:2181"
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    volumes:
-      - zookeeper_data:/var/lib/zookeeper/data
-      - zookeeper_logs:/var/lib/zookeeper/log
-    networks:
-      - booking-network
-
-  kafka:
-    image: confluentinc/cp-kafka:latest
-    hostname: kafka
-    ports:
-      - "9092:9092"
-      - "29092:29092"
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_NUM_PARTITIONS: 3
-      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
-    volumes:
-      - kafka_data:/var/lib/kafka/data
-    depends_on:
-      - zookeeper
-    networks:
-      - booking-network
-    healthcheck:
-      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    ports:
-      - "8089:8080"
-    environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
-      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
-    depends_on:
-      - kafka
-    networks:
-      - booking-network
-
   # Authentication & Authorization
   postgres-keycloak:
     image: postgres:15
@@ -115,9 +58,9 @@ services:
     environment:
       - POSTGRES_DB=user_db
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_PASSWORD=postgres
     ports:
-      - "5432:5432"
+      - "5438:5432"
     volumes:
       - postgres_user_data:/var/lib/postgresql/data
     networks:
@@ -133,9 +76,9 @@ services:
     environment:
       - POSTGRES_DB=booking_db
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_PASSWORD=postgres
     ports:
-      - "5433:5432"
+      - "5437:5432"
     volumes:
       - postgres_booking_data:/var/lib/postgresql/data
     networks:
@@ -151,7 +94,7 @@ services:
     environment:
       - POSTGRES_DB=business_db
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_PASSWORD=postgres
     ports:
       - "5434:5432"
     volumes:
@@ -169,7 +112,7 @@ services:
     environment:
       - POSTGRES_DB=payment_db
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_PASSWORD=postgres
     ports:
       - "5435:5432"
     volumes:
@@ -212,17 +155,12 @@ services:
         condition: service_started
       keycloak:
         condition: service_started
-      kafka:
-        condition: service_healthy
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-user:5432/user_db
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=password
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka/
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/booking-platform
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - SPRING_KAFKA_CONSUMER_GROUP_ID=user-service-group
-      - SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET=earliest
     networks:
       - booking-network
 
@@ -239,17 +177,12 @@ services:
         condition: service_started
       keycloak:
         condition: service_started
-      kafka:
-        condition: service_healthy
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-booking:5432/booking_db
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=password
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka/
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/booking-platform
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - SPRING_KAFKA_CONSUMER_GROUP_ID=booking-service-group
-      - SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET=earliest
     networks:
       - booking-network
 
@@ -266,17 +199,12 @@ services:
         condition: service_started
       keycloak:
         condition: service_started
-      kafka:
-        condition: service_healthy
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-business:5432/business_db
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=password
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka/
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/booking-platform
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - SPRING_KAFKA_CONSUMER_GROUP_ID=business-service-group
-      - SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET=earliest
     networks:
       - booking-network
 
@@ -293,26 +221,16 @@ services:
         condition: service_started
       keycloak:
         condition: service_started
-      kafka:
-        condition: service_healthy
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-payment:5432/payment_db
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=password
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka/
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/booking-platform
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - SPRING_KAFKA_CONSUMER_GROUP_ID=payment-service-group
-      - SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET=earliest
     networks:
       - booking-network
 
 volumes:
-  # Kafka and Zookeeper volumes
-  zookeeper_data:
-  zookeeper_logs:
-  kafka_data:
-  
   # Database volumes
   postgres_keycloak_data:
   postgres_user_data:
